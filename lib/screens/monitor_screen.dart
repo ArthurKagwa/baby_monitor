@@ -50,6 +50,10 @@ class MonitorScreen extends StatelessWidget {
             recentlyCrying: state.recentlyCrying,
             sinceLastCry: state.timeSinceLastCry,
           ),
+          const SizedBox(height: 16),
+          FanCard(
+            fanRunning: state.fanRunning,
+          ),
           const SizedBox(height: 64),
         ],
       ),
@@ -457,7 +461,7 @@ class _TemperatureCardState extends State<TemperatureCard> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 4),
             TemperatureGauge(
               temperature: displayTemp,
               minValue: 18,
@@ -465,7 +469,7 @@ class _TemperatureCardState extends State<TemperatureCard> {
               alertStatus: status,
               dimmed: false, // Don't grey out the gauge anymore
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
@@ -807,5 +811,121 @@ class _OfflineInfoCard extends StatelessWidget {
       return minutes == 1 ? '1 minute ago' : '$minutes minutes ago';
     }
     return 'Just now';
+  }
+}
+
+class FanCard extends StatefulWidget {
+  const FanCard({
+    super.key,
+    required this.fanRunning,
+  });
+
+  final bool fanRunning;
+
+  @override
+  State<FanCard> createState() => _FanCardState();
+}
+
+class _FanCardState extends State<FanCard> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    if (widget.fanRunning) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant FanCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.fanRunning && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.fanRunning && _controller.isAnimating) {
+      _controller.stop();
+      _controller.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final Color tint;
+    final String headline;
+    final String subtitle;
+
+    if (widget.fanRunning) {
+      tint = const Color(0xFFB3E5FC); // Light blue for cooling
+      headline = 'Fan running';
+      subtitle = 'Cooling the room';
+    } else {
+      tint = theme.colorScheme.surfaceContainerHighest;
+      headline = 'Fan off';
+      subtitle = 'Temperature in range';
+    }
+
+    final iconColor = widget.fanRunning
+        ? const Color(0xFF2196F3) // Blue when running
+        : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6);
+
+    return Card(
+      child: Container(
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            RotationTransition(
+              turns: widget.fanRunning ? _controller : const AlwaysStoppedAnimation(0),
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.air,
+                  size: 28,
+                  color: iconColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    headline,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

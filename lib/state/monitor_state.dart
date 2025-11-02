@@ -165,6 +165,12 @@ class BabyMonitorState extends ChangeNotifier {
   double get comfortMin => _comfortMin;
   double get comfortMax => _comfortMax;
 
+  bool _fanRunning = false;
+  bool get fanRunning => _fanRunning && _connectionStatus == ConnectionStatus.connected;
+
+  bool _fanManualOverride = false;
+  bool get fanManualOverride => _fanManualOverride;
+
   bool _crying = false;
   bool get crying => _crying && _connectionStatus == ConnectionStatus.connected;
 
@@ -335,6 +341,32 @@ class BabyMonitorState extends ChangeNotifier {
     
     // Send to ESP32 if connected
     _sendTemperatureConfig();
+  }
+
+  void setFanOverride(bool override) {
+    if (_fanManualOverride == override) return;
+    _fanManualOverride = override;
+    _addEvent(override ? 'Fan manually disabled' : 'Fan set to automatic');
+    notifyListeners();
+    
+    // Send to ESP32 if connected
+    _sendFanOverrideConfig();
+  }
+
+  Future<void> _sendFanOverrideConfig() async {
+    if (_configChar == null || _connectionStatus != ConnectionStatus.connected) {
+      return;
+    }
+    
+    try {
+      final config = json.encode({
+        'fan_override': _fanManualOverride,
+      });
+      await _configChar!.write(utf8.encode(config), withoutResponse: false);
+      log('Sent fan override config to ESP32: $config', name: 'MonitorState');
+    } catch (e) {
+      log('Failed to send fan override config: $e', name: 'MonitorState');
+    }
   }
 
   Future<void> _sendTemperatureConfig() async {
@@ -866,6 +898,24 @@ class BabyMonitorState extends ChangeNotifier {
     final int? cryAgeMs = (data['cry_age_ms'] as num?)?.toInt();
     final DateTime now = DateTime.now();
 
+    // Handle fan state
+    final dynamic fanValue = data['fan'];
+    final bool nextFanRunning = fanValue == true || fanValue == "true";
+    log('BLE: Fan state - received: $fanValue, parsed: $nextFanRunning, current: $_fanRunning', name: 'MonitorState');
+    if (nextFanRunning != _fanRunning) {
+      _fanRunning = nextFanRunning;
+      _addEvent(nextFanRunning ? 'Fan turned on' : 'Fan turned off');
+      log('BLE: Fan state CHANGED to $_fanRunning', name: 'MonitorState');
+    }
+    
+    // Handle fan override state
+    final dynamic fanOverrideValue = data['fan_override'];
+    final bool nextFanOverride = fanOverrideValue == true || fanOverrideValue == "true";
+    if (nextFanOverride != _fanManualOverride) {
+      _fanManualOverride = nextFanOverride;
+      log('BLE: Fan override state updated to $_fanManualOverride', name: 'MonitorState');
+    }
+
     if (nextCrying != _crying) {
       if (nextCrying) {
         _cryStartedAt = cryAgeMs != null
@@ -1065,6 +1115,7 @@ class BabyMonitorState extends ChangeNotifier {
     _connectionStatus = status;
     if (status != ConnectionStatus.connected) {
       _crying = false;
+      _fanRunning = false;
       _periodicCheckTimer?.cancel();
       _periodicCheckTimer = null;
       // Clear all notifications when disconnected

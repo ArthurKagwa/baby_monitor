@@ -57,26 +57,12 @@ class _RootShellState extends State<RootShell> {
 
   @override
   Widget build(BuildContext context) {
-    final monitorState = context.watch<BabyMonitorState>();
     final screens = const [
       MonitorScreen(key: ValueKey('monitor')),
       LogsScreen(key: ValueKey('logs')),
       TipsScreen(key: ValueKey('tips')),
       SettingsScreen(key: ValueKey('settings')),
     ];
-
-    final floatingActionButton = _selectedIndex == 0
-        ? FloatingActionButton.extended(
-            onPressed: () =>
-                monitorState.toggleMute(const Duration(minutes: 5)),
-            icon: Icon(
-              monitorState.isMuted
-                  ? Icons.notifications_off
-                  : Icons.notifications_active_outlined,
-            ),
-            label: Text(monitorState.isMuted ? 'Unmute' : 'Mute 5 min'),
-          )
-        : null;
 
     return Scaffold(
       body: AnimatedSwitcher(
@@ -85,8 +71,6 @@ class _RootShellState extends State<RootShell> {
         switchOutCurve: Curves.easeIn,
         child: screens[_selectedIndex],
       ),
-      floatingActionButton: floatingActionButton,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {

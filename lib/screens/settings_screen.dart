@@ -97,6 +97,12 @@ class SettingsScreen extends StatelessWidget {
                   context.read<BabyMonitorState>().setComfortTemperature(min, max);
                 },
               ),
+              const SizedBox(height: 16),
+              _SwitchTile(
+                label: 'Disable automatic fan',
+                value: state.fanManualOverride,
+                onChanged: context.read<BabyMonitorState>().setFanOverride,
+              ),
             ],
           ),
           const SizedBox(height: 16),
