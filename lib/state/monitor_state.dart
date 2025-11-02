@@ -8,6 +8,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../services/notification_service.dart';
+import '../services/readings_repository.dart';
 import '../theme.dart';
 
 enum ConnectionStatus { connected, reconnecting, disconnected }
@@ -69,9 +70,18 @@ class BabyMonitorState extends ChangeNotifier {
 
     Future.microtask(() async {
       await NotificationService().initialize();
+      await _loadLastState();
       await _initBle();
     });
+    
+    // Save state periodically when connected
+    _stateSaveTicker = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _saveCurrentState(),
+    );
   }
+
+  final ReadingsRepository _repository = ReadingsRepository();
 
   static const String _deviceName = 'baby_monitor';
   static const Set<String> _fallbackDeviceNames = {
@@ -108,6 +118,7 @@ class BabyMonitorState extends ChangeNotifier {
   Timer? _reconnectTimer;
   Timer? _dataTimeoutTimer;
   Timer? _periodicCheckTimer;
+  Timer? _stateSaveTicker;
   StringBuffer? _pendingStatusPayload;
   DateTime? _lastNotificationTime;
   DateTime? _lastChunkTime;
@@ -129,6 +140,12 @@ class BabyMonitorState extends ChangeNotifier {
   final List<TempSample> _tempHistory = <TempSample>[];
   List<TempSample> get tempHistory => List.unmodifiable(_tempHistory);
   static const int _maxTempHistory = 2880; // cap samples (approx 24h @ 30s samples)
+
+  // Offline state
+  DateTime? _lastConnectedTime;
+  DateTime? get lastConnectedTime => _lastConnectedTime;
+  String? _lastDeviceName;
+  String? get lastDeviceName => _lastDeviceName;
 
   // Cry events history
   final List<CryEvent> _cryEvents = <CryEvent>[];
@@ -193,6 +210,58 @@ class BabyMonitorState extends ChangeNotifier {
     if (_themeType == type) return;
     _themeType = type;
     _addEvent('Theme changed to ${type.label}');
+  }
+
+  /// Load last saved state from repository
+  Future<void> _loadLastState() async {
+    try {
+      final lastState = await _repository.getLastState();
+      if (lastState != null) {
+        _lastConnectedTime = lastState['lastConnected'] as DateTime?;
+        _lastDeviceName = lastState['deviceName'] as String?;
+        
+        // Load historical data
+        final tempHistory = lastState['tempHistory'] as List<TempSample>?;
+        if (tempHistory != null) {
+          _tempHistory.addAll(tempHistory);
+        }
+        
+        final cryEvents = lastState['cryEvents'] as List<CryEvent>?;
+        if (cryEvents != null) {
+          _cryEvents.addAll(cryEvents);
+        }
+        
+        final careLogs = lastState['careLogs'] as List<CareLogEntry>?;
+        if (careLogs != null) {
+          _careLogs.addAll(careLogs);
+        }
+        
+        notifyListeners();
+      }
+    } catch (e) {
+      log('Failed to load last state: $e', name: 'MonitorState');
+    }
+  }
+
+  /// Save current state to repository
+  Future<void> _saveCurrentState() async {
+    if (_connectionStatus == ConnectionStatus.connected) {
+      try {
+        await _repository.saveCurrentState(
+          temperature: _temperature,
+          tempAlert: _tempAlert,
+          crying: _crying,
+          deviceName: _device?.platformName ?? _deviceName,
+          tempHistory: _tempHistory,
+          cryEvents: _cryEvents,
+          careLogs: _careLogs,
+        );
+        _lastConnectedTime = DateTime.now();
+        _lastDeviceName = _device?.platformName ?? _deviceName;
+      } catch (e) {
+        log('Failed to save current state: $e', name: 'MonitorState');
+      }
+    }
   }
 
   String get connectionLabel {
@@ -1015,6 +1084,8 @@ class BabyMonitorState extends ChangeNotifier {
               ? 'Device connected'
               : 'Connection restored',
         );
+        // Save state when connected
+        unawaited(_saveCurrentState());
         // Show connection notification only if previously disconnected
         if (previous == ConnectionStatus.disconnected) {
           unawaited(NotificationService().showConnectionAlert(isConnected: true));
@@ -1082,12 +1153,15 @@ class BabyMonitorState extends ChangeNotifier {
     _dataTimeoutTimer?.cancel();
     _periodicCheckTimer?.cancel();
     _muteTicker?.cancel();
+    _stateSaveTicker?.cancel();
     _adapterStateSub?.cancel();
     _scanResultsSub?.cancel();
     _scanStateSub?.cancel();
     _connectionSub?.cancel();
     _statusDataSub?.cancel();
     _reconnectTimer?.cancel();
+    // Save state one last time before disposing
+    unawaited(_saveCurrentState());
     final BluetoothDevice? device = _device;
     if (device != null) {
       unawaited(device.disconnect());

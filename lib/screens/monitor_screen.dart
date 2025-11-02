@@ -13,7 +13,6 @@ class MonitorScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<BabyMonitorState>();
-    final theme = Theme.of(context);
     final bool offline = state.connectionStatus != ConnectionStatus.connected;
     final temperature = state.temperature;
 
@@ -26,62 +25,31 @@ class MonitorScreen extends StatelessWidget {
             label: state.connectionLabel,
             onTap: () => _showConnectionSheet(context),
           ),
-          const SizedBox(height: 12),
-          // Quick add log button
-          Row(
-            children: [
-              FilledButton.icon(
-                onPressed: () => _showAddLogSheet(context),
-                icon: const Icon(Icons.add),
-                label: const Text('Add log'),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: state.careLogs.take(6).map((e) {
-                    final label = _careLabel(e);
-                    return Chip(label: Text(label));
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 20),
           if (state.isMuted)
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
               child: _MutedChip(remaining: state.muteRemaining),
             ),
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: offline ? 0.4 : 1,
-            child: TemperatureCard(
-              temperature: temperature,
-              state: state,
-            ),
-          ),
-          const SizedBox(height: 16),
-          AnimatedOpacity(
-            duration: const Duration(milliseconds: 250),
-            opacity: offline ? 0.4 : 1,
-            child: CryCard(
-              crying: state.crying,
-              recentlyCrying: state.recentlyCrying,
-              sinceLastCry: state.timeSinceLastCry,
-            ),
-          ),
-          if (offline)
+          if (offline && state.lastConnectedTime != null)
             Padding(
-              padding: const EdgeInsets.only(top: 24),
-              child: Text(
-                'Device offline. Values will refresh once connection returns.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              padding: const EdgeInsets.only(bottom: 20),
+              child: _OfflineInfoCard(
+                lastConnectedTime: state.lastConnectedTime!,
+                lastDeviceName: state.lastDeviceName,
               ),
             ),
+          TemperatureCard(
+            temperature: temperature,
+            state: state,
+            showLastReading: offline && state.tempHistory.isNotEmpty,
+          ),
+          const SizedBox(height: 16),
+          CryCard(
+            crying: state.crying,
+            recentlyCrying: state.recentlyCrying,
+            sinceLastCry: state.timeSinceLastCry,
+          ),
           const SizedBox(height: 64),
         ],
       ),
@@ -137,91 +105,6 @@ class MonitorScreen extends StatelessWidget {
       },
     );
   }
-
-  String _careLabel(CareLogEntry e) {
-    final time = '${e.timestamp.hour.toString().padLeft(2, '0')}:${e.timestamp.minute.toString().padLeft(2, '0')}';
-    switch (e.type) {
-      case CareLogType.feeding:
-        return 'Feed ${e.amount ?? ''} • $time';
-      case CareLogType.diaper:
-        return 'Diaper ${e.note ?? ''} • $time';
-      case CareLogType.sleep:
-        return 'Sleep ${e.amount ?? ''} • $time';
-    }
-  }
-
-  void _showAddLogSheet(BuildContext context) {
-    final state = context.read<BabyMonitorState>();
-    showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) {
-        String? amount;
-        String? note;
-        CareLogType selected = CareLogType.feeding;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-          child: StatefulBuilder(builder: (context, setState) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Add log', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    ChoiceChip(label: const Text('Feeding'), selected: selected == CareLogType.feeding, onSelected: (v) => setState(() => selected = CareLogType.feeding)),
-                    const SizedBox(width: 8),
-                    ChoiceChip(label: const Text('Diaper'), selected: selected == CareLogType.diaper, onSelected: (v) => setState(() => selected = CareLogType.diaper)),
-                    const SizedBox(width: 8),
-                    ChoiceChip(label: const Text('Sleep'), selected: selected == CareLogType.sleep, onSelected: (v) => setState(() => selected = CareLogType.sleep)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (selected == CareLogType.feeding)
-                  TextField(
-                    decoration: const InputDecoration(labelText: 'Amount (e.g. 90 ml)'),
-                    onChanged: (v) => amount = v,
-                    keyboardType: TextInputType.text,
-                  ),
-                if (selected == CareLogType.diaper)
-                  TextField(
-                    decoration: const InputDecoration(labelText: 'Note (wet/soiled)'),
-                    onChanged: (v) => note = v,
-                    keyboardType: TextInputType.text,
-                  ),
-                if (selected == CareLogType.sleep)
-                  TextField(
-                    decoration: const InputDecoration(labelText: 'Duration or note'),
-                    onChanged: (v) => amount = v,
-                    keyboardType: TextInputType.text,
-                  ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    FilledButton(
-                      onPressed: () {
-                        state.addCareLog(type: selected, amount: amount, note: note);
-                        Navigator.of(context).pop();
-                      },
-                      child: const Text('Save'),
-                    ),
-                    const SizedBox(width: 12),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          }),
-        );
-      },
-    );
-  }
 }
 
 class _TempSparkline extends StatelessWidget {
@@ -266,39 +149,130 @@ class _SparklinePainter extends CustomPainter {
     if ((maxT - minT).abs() < 0.1) maxT = minT + 0.1;
 
     final path = Path();
-    final fillPath = Path();
+    final List<Path> fillPaths = [];
+    Path? currentFillPath;
+    bool pathStarted = false;
+    double? segmentStartX;
 
     for (int i = 0; i < samples.length; i++) {
       final s = samples[i];
       final x = (i / (samples.length - 1)).clamp(0.0, 1.0) * size.width;
       final y = size.height - ((s.temperature - minT) / (maxT - minT)).clamp(0.0, 1.0) * size.height;
-      if (i == 0) {
+      
+      // Break the line if temperature is zero or very close to zero
+      if (s.temperature.abs() < 0.01) {
+        // Close current fill path if exists
+        if (currentFillPath != null && segmentStartX != null) {
+          final lastValidI = i - 1;
+          if (lastValidI >= 0) {
+            final lastX = (lastValidI / (samples.length - 1)).clamp(0.0, 1.0) * size.width;
+            currentFillPath.lineTo(lastX, size.height);
+            currentFillPath.lineTo(segmentStartX, size.height);
+            currentFillPath.close();
+            fillPaths.add(currentFillPath);
+          }
+          currentFillPath = null;
+          segmentStartX = null;
+        }
+        pathStarted = false;
+        continue;
+      }
+      
+      if (!pathStarted) {
         path.moveTo(x, y);
-        fillPath.moveTo(x, size.height);
-        fillPath.lineTo(x, y);
+        pathStarted = true;
+        // Start new fill path
+        currentFillPath = Path();
+        segmentStartX = x;
+        currentFillPath.moveTo(x, size.height);
+        currentFillPath.lineTo(x, y);
       } else {
         path.lineTo(x, y);
-        fillPath.lineTo(x, y);
-      }
-      if (i == samples.length - 1) {
-        fillPath.lineTo(x, size.height);
-        fillPath.close();
+        currentFillPath?.lineTo(x, y);
       }
     }
+    
+    // Close the last fill path if it exists
+    if (currentFillPath != null && segmentStartX != null && samples.isNotEmpty) {
+      final lastValidIndex = samples.length - 1;
+      final lastX = (lastValidIndex / (samples.length - 1)).clamp(0.0, 1.0) * size.width;
+      currentFillPath.lineTo(lastX, size.height);
+      currentFillPath.lineTo(segmentStartX, size.height);
+      currentFillPath.close();
+      fillPaths.add(currentFillPath);
+    }
 
-  // fill under curve
+  // Draw extreme zones (red shading) under the trend line if min/max values are provided
+    if (minValue != null && maxValue != null) {
+      final maxY = size.height - ((maxValue! - minT) / (maxT - minT)).clamp(0.0, 1.0) * size.height;
+      final minY = size.height - ((minValue! - minT) / (maxT - minT)).clamp(0.0, 1.0) * size.height;
+
+      // Create paths for extreme zones under the trend line
+      final Path highZonePath = Path();
+      final Path lowZonePath = Path();
+      
+      for (int i = 0; i < samples.length; i++) {
+        final s = samples[i];
+        
+        // Skip zero values
+        if (s.temperature.abs() < 0.01) continue;
+        
+        final x = (i / (samples.length - 1)).clamp(0.0, 1.0) * size.width;
+        final y = size.height - ((s.temperature - minT) / (maxT - minT)).clamp(0.0, 1.0) * size.height;
+        
+        // High zone: if temp is above maxValue, shade from trend line to maxY
+        if (s.temperature > maxValue!) {
+          if (i == 0 || samples[i - 1].temperature <= maxValue!) {
+            highZonePath.moveTo(x, maxY);
+          }
+          highZonePath.lineTo(x, y);
+        } else if (i > 0 && samples[i - 1].temperature > maxValue!) {
+          // Close the high zone path
+          highZonePath.lineTo(x, maxY);
+          highZonePath.close();
+        }
+        
+        // Low zone: if temp is below minValue, shade from trend line to minY
+        if (s.temperature < minValue!) {
+          if (i == 0 || samples[i - 1].temperature >= minValue!) {
+            lowZonePath.moveTo(x, minY);
+          }
+          lowZonePath.lineTo(x, y);
+        } else if (i > 0 && samples[i - 1].temperature < minValue!) {
+          // Close the low zone path
+          lowZonePath.lineTo(x, minY);
+          lowZonePath.close();
+        }
+      }
+      
+      // Draw the extreme zone shading
+      final extremePaint = Paint()
+        ..color = const Color(0xFFE74C3C).withAlpha((0.2 * 255).round())
+        ..style = PaintingStyle.fill;
+      
+      canvas.drawPath(highZonePath, extremePaint);
+      canvas.drawPath(lowZonePath, extremePaint);
+    }
+
+  // fill under curve (normal gradient)
   final fillPaint = Paint()..color = color.withAlpha((0.12 * 255).round())..style = PaintingStyle.fill;
+  
+  // Draw all fill path segments
+  for (final fillPath in fillPaths) {
     canvas.drawPath(fillPath, fillPaint);
+  }
 
     // line
     canvas.drawPath(path, paint);
 
-    // last point
+    // last point - only draw if the last sample is not zero
     final last = samples.last;
-    final lastX = size.width;
-    final lastY = size.height - ((last.temperature - minT) / (maxT - minT)).clamp(0.0, 1.0) * size.height;
-    final dotPaint = Paint()..color = color;
-    canvas.drawCircle(Offset(lastX, lastY), 3.0, dotPaint);
+    if (last.temperature.abs() >= 0.01) {
+      final lastX = size.width;
+      final lastY = size.height - ((last.temperature - minT) / (maxT - minT)).clamp(0.0, 1.0) * size.height;
+      final dotPaint = Paint()..color = color;
+      canvas.drawCircle(Offset(lastX, lastY), 3.0, dotPaint);
+    }
   }
 
   @override
@@ -376,10 +350,12 @@ class TemperatureCard extends StatefulWidget {
     super.key,
     required this.temperature,
     required this.state,
+    this.showLastReading = false,
   });
 
   final double? temperature;
   final BabyMonitorState state;
+  final bool showLastReading;
 
   @override
   State<TemperatureCard> createState() => _TemperatureCardState();
@@ -394,8 +370,14 @@ class _TemperatureCardState extends State<TemperatureCard> {
     final labelColor = theme.colorScheme.onSurfaceVariant;
     final bool offline = widget.temperature == null;
     final status = widget.state.tempAlert;
+    
+    // For offline state with history, show the last reading
+    final double? displayTemp = offline && widget.showLastReading && widget.state.tempHistory.isNotEmpty
+        ? widget.state.tempHistory.last.temperature
+        : widget.temperature;
+    
     final statusLabel = offline
-        ? 'Offline'
+        ? (widget.showLastReading ? 'Last reading' : 'Offline')
         : switch (status) {
             TempAlertStatus.ok => 'Comfort',
             TempAlertStatus.low => 'Too cold',
@@ -416,11 +398,11 @@ class _TemperatureCardState extends State<TemperatureCard> {
     final statusDotColor =
         offline ? statusColor.withValues(alpha: 0.5) : statusColor;
 
-    final headlineTemperature = widget.temperature == null
+    final headlineTemperature = displayTemp == null
         ? '--.- °C'
-        : '${widget.temperature!.toStringAsFixed(1)} °C';
+        : '${displayTemp.toStringAsFixed(1)} °C';
 
-    final subtitle =   'Comfort ${widget.state.comfortMin.toStringAsFixed(0)}–${widget.state.comfortMax.toStringAsFixed(0)} °C';
+    final subtitle = 'Comfort ${widget.state.comfortMin.toStringAsFixed(0)}–${widget.state.comfortMax.toStringAsFixed(0)} °C';
 
     return Card(
       child: Padding(
@@ -477,11 +459,11 @@ class _TemperatureCardState extends State<TemperatureCard> {
             ),
             const SizedBox(height: 20),
             TemperatureGauge(
-              temperature: widget.temperature,
+              temperature: displayTemp,
               minValue: 18,
               maxValue: 32,
               alertStatus: status,
-              dimmed: offline,
+              dimmed: false, // Don't grey out the gauge anymore
             ),
             const SizedBox(height: 16),
             Container(
@@ -737,5 +719,93 @@ class _CryIconState extends State<_CryIcon>
         ),
       ),
     );
+  }
+}
+
+class _OfflineInfoCard extends StatelessWidget {
+  const _OfflineInfoCard({
+    required this.lastConnectedTime,
+    this.lastDeviceName,
+  });
+
+  final DateTime lastConnectedTime;
+  final String? lastDeviceName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final timeSinceConnection = DateTime.now().difference(lastConnectedTime);
+    final deviceName = lastDeviceName ?? 'Baby Monitor';
+
+    return Card(
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.error.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.wifi_off,
+                size: 24,
+                color: theme.colorScheme.error,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Device offline',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Last seen: ${_formatTimeSince(timeSinceConnection)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    deviceName,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatTimeSince(Duration duration) {
+    if (duration.inDays > 0) {
+      final days = duration.inDays;
+      return days == 1 ? '1 day ago' : '$days days ago';
+    }
+    if (duration.inHours > 0) {
+      final hours = duration.inHours;
+      return hours == 1 ? '1 hour ago' : '$hours hours ago';
+    }
+    if (duration.inMinutes > 0) {
+      final minutes = duration.inMinutes;
+      return minutes == 1 ? '1 minute ago' : '$minutes minutes ago';
+    }
+    return 'Just now';
   }
 }
