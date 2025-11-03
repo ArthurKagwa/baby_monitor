@@ -328,21 +328,40 @@ class ConfigCharCallbacks : public BLECharacteristicCallbacks {
     
     const char *s = value.c_str();
     
-    // Handle temp_high setting
-    const char *p = strstr(s, "temp_high");
-    if (!p) p = strstr(s, "\"temp_high\"");
-    if (p) {
-      const char *colon = strchr(p, ':');
+    // Handle temp_low setting
+    const char *pLow = strstr(s, "temp_low");
+    if (!pLow) pLow = strstr(s, "\"temp_low\"");
+    if (pLow) {
+      const char *colon = strchr(pLow, ':');
       if (colon) {
         float v = atof(colon + 1);
-        if (v >= 28.0f && v <= 35.0f) {
-          TEMP_HIGH_THRESHOLD = v;
-          if (DEBUG) Serial.printf("BLE: Temp threshold updated to %.1f°C\n", v);
-          char cfg[80];
-          snprintf(cfg, sizeof(cfg), "{\"temp_high\":%.1f}", TEMP_HIGH_THRESHOLD);
-          configCharacteristic->setValue(cfg);
+        if (v >= 18.0f && v <= 30.0f) {
+          TEMP_LOW_THRESHOLD = v;
+          if (DEBUG) Serial.printf("BLE: Temp LOW threshold updated to %.1f°C\n", v);
         }
       }
+    }
+    
+    // Handle temp_high setting
+    const char *pHigh = strstr(s, "temp_high");
+    if (!pHigh) pHigh = strstr(s, "\"temp_high\"");
+    if (pHigh) {
+      const char *colon = strchr(pHigh, ':');
+      if (colon) {
+        float v = atof(colon + 1);
+        if (v >= 18.0f && v <= 35.0f) {
+          TEMP_HIGH_THRESHOLD = v;
+          if (DEBUG) Serial.printf("BLE: Temp HIGH threshold updated to %.1f°C\n", v);
+        }
+      }
+    }
+    
+    // Update config characteristic with both values
+    if (pLow || pHigh) {
+      char cfg[120];
+      snprintf(cfg, sizeof(cfg), "{\"temp_low\":%.1f,\"temp_high\":%.1f}", 
+               TEMP_LOW_THRESHOLD, TEMP_HIGH_THRESHOLD);
+      configCharacteristic->setValue(cfg);
     }
     
     // Handle fan_override setting (true = disable fan, false = auto)
@@ -394,6 +413,7 @@ void setup() {
   
   // Fan setup
   pinMode(FAN_PIN, OUTPUT);
+  delay(100);
   digitalWrite(FAN_PIN, LOW);
   Serial.println("Fan pin configured");
 
@@ -410,8 +430,9 @@ void setup() {
     BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_READ);
   configCharacteristic->setCallbacks(new ConfigCharCallbacks());
 
-  char cfg[80];
-  snprintf(cfg, sizeof(cfg), "{\"temp_high\":%.1f}", TEMP_HIGH_THRESHOLD);
+  char cfg[120];
+  snprintf(cfg, sizeof(cfg), "{\"temp_low\":%.1f,\"temp_high\":%.1f}", 
+           TEMP_LOW_THRESHOLD, TEMP_HIGH_THRESHOLD);
   configCharacteristic->setValue(cfg);
   service->start();
   BLEAdvertising *adv = BLEDevice::getAdvertising();

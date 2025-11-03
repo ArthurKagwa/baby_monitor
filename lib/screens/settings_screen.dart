@@ -451,67 +451,38 @@ class _TemperatureRangeSlider extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        _buildSlider(
-          context,
-          label: 'Min',
-          value: minValue,
+        const SizedBox(height: 12),
+        RangeSlider(
+          values: RangeValues(minValue, maxValue),
           min: 18.0,
-          max: 24.0,
-          onChanged: (value) => onChanged(value, maxValue),
-        ),
-        const SizedBox(height: 8),
-        _buildSlider(
-          context,
-          label: 'Max',
-          value: maxValue,
-          min: 24.0,
           max: 30.0,
-          onChanged: (value) => onChanged(minValue, value),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSlider(
-    BuildContext context, {
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required ValueChanged<double> onChanged,
-  }) {
-    final theme = Theme.of(context);
-    
-    return Row(
-      children: [
-        SizedBox(
-          width: 40,
-          child: Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          divisions: 24, // 0.5°C increments
+          labels: RangeLabels(
+            '${minValue.toStringAsFixed(1)}°C',
+            '${maxValue.toStringAsFixed(1)}°C',
           ),
+          onChanged: (RangeValues values) {
+            onChanged(values.start, values.end);
+          },
         ),
-        Expanded(
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: ((max - min) * 2).toInt(),
-            label: '${value.toStringAsFixed(1)}°C',
-            onChanged: onChanged,
-          ),
-        ),
-        SizedBox(
-          width: 50,
-          child: Text(
-            '${value.toStringAsFixed(1)}°C',
-            textAlign: TextAlign.right,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '18.0°C',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                '30.0°C',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
       ],

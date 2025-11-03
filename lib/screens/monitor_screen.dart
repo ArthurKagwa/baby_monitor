@@ -44,16 +44,18 @@ class MonitorScreen extends StatelessWidget {
             state: state,
             showLastReading: offline && state.tempHistory.isNotEmpty,
           ),
-          const SizedBox(height: 16),
-          CryCard(
-            crying: state.crying,
-            recentlyCrying: state.recentlyCrying,
-            sinceLastCry: state.timeSinceLastCry,
-          ),
-          const SizedBox(height: 16),
-          FanCard(
-            fanRunning: state.fanRunning,
-          ),
+          if (!offline) ...[
+            const SizedBox(height: 16),
+            CryCard(
+              crying: state.crying,
+              recentlyCrying: state.recentlyCrying,
+              sinceLastCry: state.timeSinceLastCry,
+            ),
+            const SizedBox(height: 16),
+            FanCard(
+              fanRunning: state.fanRunning,
+            ),
+          ],
           const SizedBox(height: 64),
         ],
       ),

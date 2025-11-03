@@ -1114,8 +1114,8 @@ class BabyMonitorState extends ChangeNotifier {
     final ConnectionStatus previous = _connectionStatus;
     _connectionStatus = status;
     if (status != ConnectionStatus.connected) {
-      _crying = false;
-      _fanRunning = false;
+      // Don't immediately clear crying/fan state - keep last known state
+      // They will be cleared after reconnecting or after a longer period
       _periodicCheckTimer?.cancel();
       _periodicCheckTimer = null;
       // Clear all notifications when disconnected
